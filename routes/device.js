@@ -31,48 +31,20 @@ router.get('/', async function(req, res) {
     }
 });
 
-router.post('/', [
-    check('device_id').exists(),
-    check('user_id').exists(),
-    check('hotel_id').exists(),
-    check('room').exists(),
-    check('status').exists()
+router.put('/:device_id/activate', [
+    check('device_id').exists()
 ], async function(req, res, next) {
-    
+    console.log('activating device ' + req.params.device_id, req.query.room);
+
     try {
         validationResult(req).throw();
     } catch (error) {
         return res.status(422).send(error);
     }
-    
-    // console.log(req.body.device_id);
-    try {
-        let device = new DeviceModel({
-            device_id: req.body.device_id,
-            hotel_id: req.body.hotel_id,
-            user_id: req.body.user_id,
-            room: req.body.room,
-            status: 'inactive' // status would always be inactive when created,
-        });
-
-        // console.log('==device=',device);
-        let result = await device.save();
-        // console.log('@@@', result);
-        res.status(200).send(result);
-    } catch (error) {
-        console.log(error);
-        res.status(500).send(error);
-    }
-});
-
-router.put('/:device_id/activate', [
-    check('device_id').exists()
-], async function(req, res, next) {
-    console.log('activating device ' + req.params.device_id);
 
     let device_id = req.params.device_id;
     try {
-        await DeviceModel.updateOne({device_id: device_id}, { $set: { status: 'active' } });
+        await DeviceModel.updateOne({device_id: device_id}, { $set: { status: 'active', room: req.query.room} });
         console.log('device activated.');
         return res.status(200).send({device_id: device_id, activated: true});
     } catch (error) {
@@ -97,13 +69,20 @@ router.put('/:device_id/deactivate', [
     }
 });
 
-router.put('/:device_id/addToHotel', [
+router.put('/:device_id', [
     check('device_id').exists(),
-    check('hotel_id').exists()
+    check('hotel_id').exists(),
+    check('room').exists(),
 ], async function(req, res) {
-    console.log('adding device ' + req.params.device_id + ' to hotel ' + req.query.hotel_id);
+    console.log('adding device ' + req.params.device_id + ' to hotel ' + req.body.hotel_id, req.body.room, req.body.status);
 
-    let device_id = req.params.device_id, hotel_id = req.query.hotel_id;
+    try {
+        validationResult(req).throw();
+    } catch (error) {
+        return res.status(422).send(error);
+    }
+
+    let device_id = req.params.device_id, hotel_id = req.body.hotel_id, room = req.body.room, status = req.body.status;
 
     try {
         // Get hotel object
@@ -113,7 +92,7 @@ router.put('/:device_id/addToHotel', [
         }
 
         // Update the device
-        await DeviceModel.updateOne({device_id: device_id}, { $set: { hotel_id: hotel_id, belongs_to: hotel } });
+        await DeviceModel.updateOne({device_id: device_id}, { $set: { hotel_id: hotel_id, belongs_to: hotel, room: room, status: status } });
         return res.status(200).send({device_id: device_id});
     } catch (error) {
         console.log('error in adding device to hotel.', error);

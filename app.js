@@ -29,10 +29,10 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
-console.log('prefix=',config.api.prefix);
 app.use('/', require('./routes/index'));
 app.use('/device', require('./routes/device'));
 app.use('/hotel', require('./routes/hotel'));
+app.use('/order', require('./routes/order'));
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
