@@ -26,11 +26,12 @@ input GuestOrderInput {
 }
 
 type GuestOrderOutput {
+	_id:ID!
 	o_id: ID!
 	hotel_id: String!
 	user_id: String!
 	room_no: String!
-	o_items: [OrderItemOutput!]!
+	o_items: [OrderItemOutput!]
 	o_time: Date!
 	o_status: Status!
 	o_priority: Priority!

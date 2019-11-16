@@ -13,5 +13,17 @@
 module.exports = {
     api: {
         prefix: '/api/v1'
-    }
+    },
+    cognito: {
+        region: "ap-south-1",
+        cognitoUserPoolId: "ap-south-1_M1pQu9BIA",
+        tokenUse: "access", //Possible Values: access | id
+        tokenExpiration: 3600000 //Up to default expiration of 1 hour (3600000 ms)
+    },
+    auth0: {
+        domain: "kamamishu.eu.auth0.com",
+        clientId: "TkbQ7ZJoiPuacBboqGpm4xFmC5zgsEQt",
+        audience: "https://kamamishu.com/api/v1"
+    },
+    authProvider: "auth0"
 }

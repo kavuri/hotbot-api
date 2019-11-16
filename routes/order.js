@@ -51,3 +51,22 @@ module.exports = graphqlHttp(
         graphiql: true
     }
 );
+
+// Get all orders
+// input=hotel_id(mandatory), room_no(optional), status=open & closed (optional, open by default)
+// output=sort(order_time)
+// auth=check if the logged-in user belongs to hotel_id
+router.get('/', async function(req, res) {
+    
+});
+
+// Add comment
+// priority, status, comment, follow-up
+router.put('/', async function(req, res) {
+
+});
+
+// Get a single order
+router.get('/', async function(req, res) {
+
+});

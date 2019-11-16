@@ -13,6 +13,7 @@
  'use strict';
  var express = require('express');
  var router = express.Router();
+ let authenticate = require('../auth');
 
  const DeviceModel = require('../../src/db').DeviceModel,
        HotelModel = require('../../src/db').HotelModel,
@@ -32,8 +33,10 @@ router.get('/', async function(req, res) {
 });
 
 router.put('/:device_id/activate', [
-    check('device_id').exists()
-], async function(req, res, next) {
+        check('device_id').exists()
+        ],
+        authenticate,
+        async function(req, res, next) {
     console.log('activating device ' + req.params.device_id, req.query.room);
 
     try {
@@ -54,8 +57,10 @@ router.put('/:device_id/activate', [
 });
 
 router.put('/:device_id/deactivate', [
-    check('device_id').exists()
-], async function(req, res, next) {
+        check('device_id').exists()
+        ],
+        authenticate,
+        async function(req, res, next) {
     console.log('de-activating device ' + req.params.device_id);
 
     let device_id = req.params.device_id;
@@ -70,10 +75,12 @@ router.put('/:device_id/deactivate', [
 });
 
 router.put('/:device_id', [
-    check('device_id').exists(),
-    check('hotel_id').exists(),
-    check('room').exists(),
-], async function(req, res) {
+        check('device_id').exists(),
+        check('hotel_id').exists(),
+        check('room').exists(),
+        ],
+        authenticate,
+        async function(req, res) {
     console.log('adding device ' + req.params.device_id + ' to hotel ' + req.body.hotel_id, req.body.room, req.body.status);
 
     try {
