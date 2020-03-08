@@ -39,9 +39,9 @@ router.get('/',
 /**
  * Create a hotel group
  */
-router.post('/:group_id',
-    auth0.authenticate,
-    auth0.authorize('create:hotel'),
+router.post('/',
+    // auth0.authenticate,
+    // auth0.authorize('create:hotel'),
     [
         check('name').exists({ checkNull: true, checkFalsy: true }),
     ],
