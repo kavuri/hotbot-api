@@ -2,56 +2,49 @@
  * Unauthorized copying of this file, via any medium is strictly prohibited
  * Proprietary and confidential
  */
-'use strict';
 
+'use strict';
 const express = require('express');
 const router = express.Router();
 const auth0 = require('../lib/auth0');
-
-const FacilityModel = require('../db/Facility'),
+const HotelGroupModel = require('../db/HotelGroup'),
     _ = require('lodash'),
     { check, validationResult } = require('express-validator');
 
 /**
- * @param hotel_id
- * @returns all devices in that hotel
+ * @returns all hotel groups
  */
 router.get('/',
-    auth0.authenticate,
-    auth0.authorize('read:facility'),
-    [
-        check('hotel_id').exists({ checkNull: true, checkFalsy: true }),
-    ],
+    // auth0.authenticate,
+    // auth0.authorize('read:hotel'),
     async function (req, res) {
+        const resPerPage = parseInt(req.query.resPerPage || 9); // results per page
+        const page = parseInt(req.query.page || 1); // Page 
+        console.log('get all hotel groups:', resPerPage, page);
         try {
-            validationResult(req).throw();
+            let groups = await HotelGroupModel
+                .find({})
+                .skip((resPerPage * page) - resPerPage)
+                .limit(resPerPage)
+                .lean()
+                .exec();
+            console.log(groups);
+            return res.status(200).send(groups);
         } catch (error) {
-            return res.status(422).send(error);
-        }
-
-        let hotel_id = req.query.hotel_id;
-        try {
-            let facilities = await FacilityModel.find({ hotel_id: hotel_id }).exec();
-            console.log(facilities);
-            return res.status(200).send(facilities);
-        } catch (error) {
-            console.log('error in getting all devices.', error);
+            console.log('error in getting all hotel groups.', error);
             return res.status(400).send(error);
         }
     });
 
 /**
- * @param hotel_id
- * @returns updated facility object
- */
-router.put('/:facility_id',
+* @param group_id
+* @returns updated group object
+*/
+router.put('/:group_id',
     auth0.authenticate,
-    auth0.authorize('update:facility'),
-    [
-        check('facility_id').exists({ checkNull: true, checkFalsy: true })
-    ],
+    auth0.authorize('update:group'),
     async function (req, res) {
-        console.log('updating facility ' + req.params.facility_id);
+        console.log('updating group ' + req.params.facility_id);
 
         try {
             validationResult(req).throw();
@@ -71,5 +64,4 @@ router.put('/:facility_id',
             res.status(500).send(error);
         }
     });
-
 module.exports = router;
