@@ -37,6 +37,30 @@ router.get('/',
     });
 
 /**
+ * Create a hotel group
+ */
+router.post('/:group_id',
+    auth0.authenticate,
+    auth0.authorize('create:hotel'),
+    [
+        check('name').exists({ checkNull: true, checkFalsy: true }),
+    ],
+    async function (req, res) {
+        try {
+            validationResult(req).throw();
+        } catch (error) {
+            return res.status(422).send(error);
+        }
+
+        const hotelGroup = new HotelGroupModel(req.body);
+        try {
+            let hg = await hotelGroup.save();
+            res.status(200).send(hg);
+        } catch (error) {
+            res.status(500).send(error);
+        }
+    });
+/**
 * @param group_id
 * @returns updated group object
 */
