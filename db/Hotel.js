@@ -10,10 +10,10 @@ const _ = require('lodash'),
     AutoIncrement = require('./index').AutoIncrement;
 
 const HotelSchema = new mongoose.Schema({
-    hotel_id: {type: String, required: true, unique: true},
-    name: {type: String, required: true, index: true},
+    hotel_id: { type: String, required: true, unique: true },
+    name: { type: String, required: true, index: true },
     description: String,
-    group_id: {type: String, required: true, unique: true, ref:'HotelGroup'},
+    group_id: { type: String, required: true, unique: true, ref: 'HotelGroup' },
     info: {
         address: {
             address1: String,
@@ -30,24 +30,39 @@ const HotelSchema = new mongoose.Schema({
             email1: String
         },
         coordinates: {
-            lat: {type: String, required: true},
-            lng: {type: String, required: true}
+            lat: { type: String, required: true },
+            lng: { type: String, required: true }
         },
         front_desk_count: Number,
         room_count: Number,
         reception_number: String
     }
-   }, {timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }, strict: false});
+}, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }, strict: false });
 
-HotelSchema.index({hotel_id: 1});
-HotelSchema.index({name: 1});
-HotelSchema.index({group_id: 1});
+HotelSchema.index({ hotel_id: 1 });
+HotelSchema.index({ name: 1 });
+HotelSchema.index({ group_id: 1 });
 
 HotelSchema.plugin(AutoIncrement.plugin, {
     model: 'Hotel',
     field: 'hotel_id',
     startAt: 100,
     incrementBy: 1
+});
+
+//Setup the middleware
+HotelSchema.post('save', async function (doc) {
+    console.log('%%% Hotel save post hook.', doc);
+
+    // Create the facilities for this hotel from the default graph representation
+    let audit = new AuditLogModel({
+        coll: DeviceModel.collection.name,
+        change: 'created',
+        by: doc.user_id, // TODO: Get this user from 
+        obj: doc
+    });
+
+    var log = await audit.save(audit);
 });
 
 module.exports = DBConn.model('Hotel', HotelSchema);
