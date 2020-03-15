@@ -7,36 +7,34 @@
 const _ = require('lodash'),
     mongoose = require('mongoose'),
     DBConn = require('./index').DBConn,
-    AutoIncrement = require('./index').AutoIncrement;
+    AutoIncrement = require('./index').AutoIncrement,
+    graph = require('../../scripts/graph');
 
 const HotelSchema = new mongoose.Schema({
     hotel_id: { type: String, required: true, unique: true },
     name: { type: String, required: true, index: true },
     description: String,
     group_id: { type: String, required: true, unique: true, ref: 'HotelGroup' },
-    info: {
-        address: {
-            address1: String,
-            address2: String,
-            address3: String,
-            city: String,
-            pin: String,
-            state: String,
-            country: String
-        },
-        contact: {
-            phone1: String,
-            phone2: String,
-            email1: String
-        },
-        coordinates: {
-            lat: { type: String, required: true },
-            lng: { type: String, required: true }
-        },
-        front_desk_count: Number,
-        room_count: Number,
-        reception_number: String
-    }
+    address: {
+        address1: String,
+        address2: String,
+        address3: String,
+        city: String,
+        pin: String,
+        state: String,
+        country: String
+    },
+    contact: {
+        phone: [String],
+        email: [String]
+    },
+    coordinates: {
+        lat: { type: String, required: true },
+        lng: { type: String, required: true }
+    },
+    rooms: [{type: mongoose.Schema.Types.ObjectId, ref: 'Room' }],
+    front_desk_count: Number,
+    reception_number: String
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }, strict: false });
 
 HotelSchema.index({ hotel_id: 1 });
@@ -52,17 +50,10 @@ HotelSchema.plugin(AutoIncrement.plugin, {
 
 //Setup the middleware
 HotelSchema.post('save', async function (doc) {
-    console.log('%%% Hotel save post hook.', doc);
+    //console.log('%%% Creating graph for hotel:', doc);
 
     // Create the facilities for this hotel from the default graph representation
-    let audit = new AuditLogModel({
-        coll: DeviceModel.collection.name,
-        change: 'created',
-        by: doc.user_id, // TODO: Get this user from 
-        obj: doc
-    });
-
-    var log = await audit.save(audit);
+    graph.create(doc.hotel_id, doc.name);
 });
 
 module.exports = DBConn.model('Hotel', HotelSchema);

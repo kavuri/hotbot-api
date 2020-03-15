@@ -8,54 +8,21 @@
 const _ = require('lodash'),
     Fuse = require('fuse.js'),
     KamError = require('../utils/KamError'),
-    FacilityModel = require('./Facility.js'),
     OrderModel = require('./Order'),
     ITEM_STATUS = require('../utils/helpers').ITEM_STATUS,
     cache = require('../cache');
 
-/**********************************************************************************************************
- * Facility functions
- **********************************************************************************************************/
-// Function to return all facilities and facilities of a type
-// module.exports.all_facility_names = async function (hotel_id, facility_type) {
-//     console.log('all_facility_names', hotel_id, facility_type);
-//     if (_.isNull(hotel_id) || _.isUndefined(hotel_id)) {
-//         throw new KamError.InputError('invalid input. hotel_id=' + hotel_id + ',' + 'facility_type=' + facility_type);
-//     }
-
-//     var query = { hotel_id: hotel_id };
-//     if (!_.isNull(facility_type) && !_.isUndefined(facility_type)) {
-//         query['f_type'] = facility_type;
-//     }
-
-//     let data;
-//     try {
-//         data = await FacilityModel.find(query, { '_id': 0, 'f_name': 1, 'synonyms': 1 }).lean();
-//     } catch (error) {
-//         console.error('error getting hotel info:', hotel_id, error);
-//         throw KamError.DBError('error getting hotel info:' + hotel_id);
-//     }
-
-//     if (_.isEmpty(data) || _.isUndefined(data)) {
-//         // Make a check atleast when all facilities are asked for
-//         if (_.isNull(facility_type) && _.isUndefined(facility_type)) {
-//             // Means, all facilities are requested
-//             // No facilities in database for this hotel - something wrong with the setup
-//             throw new KamError.DBSetupError('db for this hotel has not been setup');
-//         }
-//     }
-
-//     return data;
-// }
-
-module.exports.all_facility_names = async (hotel_id, facility_type) => {
-    console.log('all_facility_names', hotel_id, facility_type);
+/**
+ * Returns all facilities of the hotel
+ */
+module.exports.allFacilities = async (hotel_id) => {
+    console.log('all_facility_names', hotel_id);
     if (_.isNull(hotel_id) || _.isUndefined(hotel_id)) {
-        throw new KamError.InputError('invalid input. hotel_id=' + hotel_id + ',' + 'facility_type=' + facility_type);
+        throw new KamError.InputError('invalid input. hotel_id=' + hotel_id);
     }
 
     const g = await cache.get(hotel_id);
-    const facilities = g.node('facilities');
+    const facilities = g.successors('facilities');
     if (_.isEmpty(facilities) || _.isUndefined(facilities)) {
         // Does this hotel have no facilities? Bad marketing. There should be something
         throw new KamError.DBSetupError('this hotel does not seem to have any facilities. Add atleast few');
@@ -65,6 +32,10 @@ module.exports.all_facility_names = async (hotel_id, facility_type) => {
     return facilities;
 }
 
+/**
+ * Returns of the main facilities (a subset of allFacilities)
+ * FIXME: This is not used right now. Maybe later
+ */
 module.exports.main_facilities = async (hotel_id) => {
     console.log('main_facilities:', hotel_id);
     if (_.isNull(hotel_id) || _.isUndefined(hotel_id)) {
@@ -77,69 +48,9 @@ module.exports.main_facilities = async (hotel_id) => {
     return main_facilities;
 }
 
-// Function to get a specific facility
-/*
-module.exports.facility = async function (hotel_id, facility_name, facility_type) {
-    console.log('@@facility hotel_id=' + hotel_id + ',facility_name=' + facility_name + ',facility_type=' + facility_type);
-    if (_.isNull(hotel_id) || _.isUndefined(hotel_id) ||
-        _.isNull(facility_name) || _.isUndefined(facility_name)) {
-        throw new KamError.InputError('invalid input. hotel_id=' + hotel_id + ',' + 'facility_type=' + facility_type);
-    }
-
-    // This is a 2-step process
-    // 1. Get the facility names (including synonyms). Use fuse.js to search for the facility
-    // 2. Use ths name in (1) to get the actual facility
-    let names;
-    try {
-        names = await this.all_facility_names(hotel_id, facility_type);
-    } catch (error) {
-        throw error;
-    }
-
-    // 2. Use fuse to search for the name
-    let fuse_options = {
-        shouldSort: true,
-        threshold: 0.5,
-        location: 0,
-        distance: 100,
-        maxPatternLength: 32,
-        minMatchCharLength: 3,
-        keys: [
-            "f_name",
-            "synonyms"
-        ]
-    };
-    // console.log('++names=', names);
-    var fuse = new Fuse(names, fuse_options);
-    var result = fuse.search(facility_name);
-
-    if (_.isEmpty(result)) {
-        // No such facility
-        throw new KamError.FacilityDoesNotExistError('facility with name ' + facility_name + ' and type ' + facility_type + ' for hotel with id ' + hotel_id + ' does not exist');
-    }
-
-    // console.log('###fuse search result=', result);
-    // 3. Make another DB call to get the facility
-    let data;
-    try {
-        data = await FacilityModel.findOne({ hotel_id: hotel_id, f_name: result[0].f_name }).lean();
-    } catch (error) {
-        console.error('error getting hotel info:', hotel_id, error);
-        throw new KamError.DBError('error getting hotel info:' + hotel_id);
-    }
-
-    if (_.isUndefined(data) || _.isEmpty(data)) {
-        // Did not get any facility with the required facility name
-        throw new KamError.FacilityDoesNotExistError('facility with name ' + facility_name + ' and type ' + facility_type + ' for hotel with id ' + hotel_id + ' does not exist');
-    }
-
-    return data;
-};
-*/
-
-function search(facility_name) {
-    if (_.isUndefined(facility_name)) {
-        throw new KamError.InputError('invalid data for search. facility_name=' + facility_name);
+function search(name, g) {
+    if (_.isUndefined(name)) {
+        throw new KamError.InputError('invalid data for search. name=' + name);
     }
 
     // Use fuse to search for the name
@@ -148,64 +59,84 @@ function search(facility_name) {
         includeScore: true,
         threshold: 0.4,
         location: 0,
-        distance: 10,
+        distance: 100,
         maxPatternLength: 32,
         minMatchCharLength: 3,
         keys: [
-            "synonyms",
-            "f_name"
+            "items"
         ]
     };
 
-    // Get all the facilities and their synonyms
-    const facilities = g.node('facilities');
-    var data = [{
-        f_name: facilities.f_name,
-        synonyms: facilities.synonyms
-    }];
+    // Get all the items from 'all_items' node
+    const items = g.node('all_items');
+    // console.log('total=', items.length)
 
-    console.log('++data=', data);
-    var fuse = new Fuse(data, fuse_options);
-    var result = fuse.search(facility_name);
+    var fuse = new Fuse(items, fuse_options);
+    // console.log('++data=', JSON.stringify(fuse));
+    var result = fuse.search(name);
+    console.log('search result=', JSON.stringify(result));
 
     if (!_.isEmpty(result)) {
         // There are some results
-        if (result[0].score < 0.15) { // the more the score is close to 0, the closer the search string to the result
-            return g.node(result[0].item.f_name);
-        }
+        // if (result[0].score < 0.15) { // the more the score is close to 0, the closer the search string to the result
+        // return g.node(result[0].item.f_name);
+        const res = items[result[0].item];
+        console.log('search result=', res);
+        return res;
+        // }
     }
     return [];
 }
 
-module.exports.facility = async function (hotel_id, facility_name, facility_type) {
-    console.log('@@facility hotel_id=' + hotel_id + ',facility_name=' + facility_name + ',facility_type=' + facility_type);
+/**
+ * @param hotel_id
+ * @param name
+ * @param facility_type
+ */
+module.exports.item = async function (hotel_id, name) {
+    console.log('@@facility hotel_id=' + hotel_id + ',name=' + name);
     if (_.isNull(hotel_id) || _.isUndefined(hotel_id) ||
-        _.isNull(facility_name) || _.isUndefined(facility_name)) {
-        throw new KamError.InputError('invalid input. hotel_id=' + hotel_id + ',' + 'facility_name=' + facility_name);
+        _.isNull(name) || _.isUndefined(name)) {
+        throw new KamError.InputError('invalid input. hotel_id=' + hotel_id + ',' + 'name=' + name);
+    }
+
+    let g;
+    try {
+        g = await cache.get(hotel_id);
+    } catch (error) {
+        throw error;
     }
 
     // Three step process. Optimized
-    // 1. Find the item from the graph - O(1)
-    // 2. If item is not found, do a fuzzy search from all the facilities
-    // 3. If the item is found in step 2, use the name as the node to fetch from graph again
-
-    const g = await cache.get(hotel_id);
-    if (g.hasNode(facility_name)) {
-        // Facility is found. Send it out
-        // This node could be a child node. The parent would have the full-info. So check if there is a parent
-        const parent = g.parent(facility_name);
+    // 1. Search for the item using fuzzy search
+    // 2. If item is not found, throw an error that item not found
+    // 3. If the item is found,
+    //   3.1. If the item has a parent, return the parent, else
+    //   3.2 If the item does not have a parent, return the node
+    const res = search(name, g);
+    if (_.isEmpty(res)) {
+        // Could not find the item. Return not found
+        console.log('facility ' + name + ' not found in search');
+        throw new KamError.FacilityDoesNotExistError('facility ' + name + ' does not exist');
+    } else {
+        const parent = g.parent(res);
         if (_.isUndefined(parent)) {
             // Parent does not exist. Send the node
-            return g.node(facility_name);
+            return g.node(name);
         } else {
             // Parent exists and is the real node. Return it
-            return parent;
+            return g.node(parent);
         }
-    } else {
-        // Could not find node directly. Do a fuzzy search
-        const res = search(facility_name);
-        return res;
     }
+}
+
+module.exports.successors = async (hotel_id, name) => {
+    if (_.isUndefined(hotel_id)) {
+        throw new KamError.InputError('invalid input. hotel_id=' + hotel_id);
+    }
+
+    const g = await cache.get(hotel_id);
+    return g.successors(name)
 }
 
 /**********************************************************************************************************
@@ -248,9 +179,9 @@ module.exports.create_order = async function (hotel_id, room_no, user_id, items)
  * @param f__id - the item id
  * @returns {}
  */
-module.exports.is_item_already_ordered = async function (hotel_id, room_no, f_id) {
-    if (_.isUndefined(hotel_id) || _.isUndefined(room_no) || _.isUndefined(f_id)) {
-        throw new KamError.InputError('invalid input. hotel_id=' + hotel_id + ', room_no=' + room_no + ',items=' + item_id);
+module.exports.is_item_already_ordered = async function (hotel_id, room_no, item) {
+    if (_.isUndefined(hotel_id) || _.isUndefined(room_no) || _.isUndefined(item)) {
+        throw new KamError.InputError('invalid input. hotel_id=' + hotel_id + ', room_no=' + room_no + ',items=' + item);
     }
 
     try {
@@ -261,27 +192,13 @@ module.exports.is_item_already_ordered = async function (hotel_id, room_no, f_id
         var end = new Date();
         end.setHours(23, 59, 59, 999);
 
-        var order = await OrderModel.find(
-            {
-                hotel_id: hotel_id,
-                room_no: room_no,
-                "items.facility": f_id,
-                created_at: { $gte: start, $lte: end }
-            }).sort({ created_at: -1 }).exec();
+        var order = await OrderModel
+            .find({ hotel_id: hotel_id, room_no: room_no, "items.name": item.name, created_at: { $gte: start, $lte: end } })
+            .sort({ created_at: -1, "status.created": -1 })
+            .lean()
+            .exec();
 
-        if (_.isEmpty(order)) { // Item has not been ordered ever
-            // No such order has been made
-            return { item: f_id, status: ITEM_STATUS.NOT_ORDERED };
-        }
-        //  else if () { // There are have been same orders and already served. This is going to be a hotel specific condition
-
-        //  } else if () { // There was a same order, but not served yet.
-
-        //  }
-        console.log('item=', order);
-
-        //TODO: Should status of the order be checked? Whether the previously ordered item is served?
-        // Also check for 'cancelled' status
+        return order;
     } catch (error) {
         console.log('error thrown', error);
         throw new KamError.DBError(error);
@@ -323,20 +240,11 @@ async function test_is_item_already_ordered() {
     console.log(r);
 }
 
-//  main();
-
-// test_is_item_already_ordered();
-
-const test_hotel = async function () {
-    let Hotel = require('./Hotel');
-    var p = await Hotel.room_item("100", "r", "tiss");
-    console.log('data=', JSON.stringify(p));
+const test_search = async () => {
+    const g = await cache.get('000');
+    var t = search('time', g);
+    console.log('t=', t);
 }
 
-const test_all_facilities = async function () {
-    var facilities = await require('./db_funcs').all_facility_names('100');
-    console.log('all facilities=', facilities);
-}
-
-
+// test_search();
 // test_all_facilities();
