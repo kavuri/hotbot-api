@@ -92,6 +92,9 @@ router.put('/:hotel_id',
         try {
             // Find the hotel so that reference to room can be made
             let hotel = await HotelModel.findOne({ hotel_id: hotel_id }).populate('rooms').exec();
+            if (_.isUndefined(hotel) || _.isNull(hotel)) {
+                return res.status(404).send({error:'hotel with id ' + hotel_id + ' not found'});
+            }
             // Check if room_no has already been added to hotel
             room.hotel_id = hotel_id;
 
