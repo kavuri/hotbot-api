@@ -14,7 +14,8 @@ const CheckinCheckoutSchema = new mongoose.Schema({
     checkin: { type: Date, required: true, default: Date.now },
     checkout: { type: Date },
     guestName: { type: String },
-    guestNumber: { type: String, required: true }
+    guestNumber: { type: String, required: true },
+    orders: [{type: mongoose.Schema.Types.ObjectId, ref: 'Order'}]
 });
 
 var CheckinCheckoutModel = DBConn.model('CheckinCheckout', CheckinCheckoutSchema);

@@ -9,8 +9,8 @@ const _ = require('lodash'),
     Fuse = require('fuse.js'),
     KamError = require('../utils/KamError'),
     OrderModel = require('./Order'),
-    ITEM_STATUS = require('../utils/helpers').ITEM_STATUS,
-    cache = require('../cache');
+    cache = require('../cache'),
+    CheckinCheckout = require('./CheckinCheckout');
 
 /**
  * Returns all facilities of the hotel
@@ -48,7 +48,7 @@ module.exports.main_facilities = async (hotel_id) => {
     return main_facilities;
 }
 
-function search(name, g) {
+async function search(name, g) {
     if (_.isUndefined(name)) {
         throw new KamError.InputError('invalid data for search. name=' + name);
     }
@@ -80,12 +80,14 @@ function search(name, g) {
         // There are some results
         // if (result[0].score < 0.15) { // the more the score is close to 0, the closer the search string to the result
         // return g.node(result[0].item.f_name);
-        const res = items[result[0].item];
-        console.log('search result=', res);
+        console.log('result=',items[result[0].item])
+        let res = items[result[0].item];
+        console.log('returning=', res);
         return res;
         // }
+    } else {
+        return {};
     }
-    return [];
 }
 
 /**
@@ -104,6 +106,7 @@ module.exports.item = async function (hotel_id, name) {
     try {
         g = await cache.get(hotel_id);
     } catch (error) {
+        console.log('error while getting item from cache:', error)
         throw error;
     }
 
@@ -113,18 +116,23 @@ module.exports.item = async function (hotel_id, name) {
     // 3. If the item is found,
     //   3.1. If the item has a parent, return the parent, else
     //   3.2 If the item does not have a parent, return the node
-    const res = search(name, g);
+    console.log('searchin for ' + name);
+    const res = await search(name, g);
+    console.log(':item got:', res);
     if (_.isEmpty(res)) {
         // Could not find the item. Return not found
         console.log('facility ' + name + ' not found in search');
-        throw new KamError.FacilityDoesNotExistError('facility ' + name + ' does not exist');
+        //throw new KamError.FacilityDoesNotExistError('facility ' + name + ' does not exist');
+        return {};
     } else {
         const parent = g.parent(res);
         if (_.isUndefined(parent)) {
+            console.log('no parent. returning ', g.node(res));
             // Parent does not exist. Send the node
-            return g.node(name);
+            return g.node(res);
         } else {
             // Parent exists and is the real node. Return it
+            console.log('parent exists:', parent, ' returning ', g.node(parent));
             return g.node(parent);
         }
     }
@@ -144,8 +152,11 @@ module.exports.successors = async (hotel_id, name) => {
  **********************************************************************************************************/
 module.exports.create_order = async function (hotel_id, room_no, user_id, items) {
 
-    if (_.isUndefined(hotel_id) || _.isUndefined(room_no) || _.isUndefined(user_id) ||
-        (_.isUndefined(items) || _.isEmpty(items))) {
+    if (_.isUndefined(hotel_id) ||
+        _.isUndefined(room_no) ||
+        _.isUndefined(user_id) ||
+        _.isUndefined(items) ||
+        _.isEmpty(items)) {
         throw new KamError.InputError('invalid input. hotel_id=' + hotel_id + ',' + 'room_no=' + room_no + ',user_id=' + user_id + ',items=', items);
     }
 
@@ -176,7 +187,7 @@ module.exports.create_order = async function (hotel_id, room_no, user_id, items)
 /**
  * @param hotel_id - the id of the hotel
  * @param room_no - the room number
- * @param f__id - the item id
+ * @param item - the item 
  * @returns {}
  */
 module.exports.is_item_already_ordered = async function (hotel_id, room_no, item) {
@@ -185,20 +196,11 @@ module.exports.is_item_already_ordered = async function (hotel_id, room_no, item
     }
 
     try {
-        // Check for items ordered only today
-        var start = new Date();
-        start.setHours(0, 0, 0, 0);
-
-        var end = new Date();
-        end.setHours(23, 59, 59, 999);
-
-        var order = await OrderModel
-            .find({ hotel_id: hotel_id, room_no: room_no, "items.name": item.name, created_at: { $gte: start, $lte: end } })
-            .sort({ created_at: -1, "status.created": -1 })
-            .lean()
-            .exec();
-
-        return order;
+        // start = checkin time of the guest
+        const filter = { hotel_id: hotel_id, room_no: room_no, checkout: null };
+        let room = await CheckinCheckoutModel.findOne(filter).exec();
+        let sameOrder = _.filter(room.orders, { items: [{ name: item.name }] });
+        return sameOrder;
     } catch (error) {
         console.log('error thrown', error);
         throw new KamError.DBError(error);
