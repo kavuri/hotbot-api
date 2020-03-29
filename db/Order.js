@@ -5,9 +5,11 @@
 
 'using strict';
 
-const mongoose = require('mongoose'),
+const _ = require('lodash'),
+    mongoose = require('mongoose'),
     DBConn = require('./index').DBConn,
-    AutoIncrement = require('./index').AutoIncrement;
+    AutoIncrement = require('./index').AutoIncrement,
+    CheckinCheckoutModel = require('./CheckinCheckout');
 
 /**
  * new = for any new order, created by system
@@ -18,13 +20,13 @@ const mongoose = require('mongoose'),
  */
 var StatusSchema = new mongoose.Schema({
     set_by: { type: String }, // This is the id of whoever changed the status
-    status: { type: String, required: true, enum: ['new', 'progress', 'done', 'cant_serve', 'cancelled'], default: 'new' },
+    status: { type: String, required: true, enum: ['new', 'progress', 'done', 'cant_serve', 'cancelled'] },
     created: { type: Date, default: Date.now }
 });
 
 var PrioritySchema = new mongoose.Schema({
     set_by: { type: String }, // This is the email id of the logged-in user
-    priority: { type: String, required: true, enum: ['urgent', 'asap', 'leisure'], default: 'asap' },
+    priority: { type: String, required: true, enum: ['urgent', 'asap', 'leisure'] },
     created: { type: Date, default: Date.now }
 });
 
@@ -57,18 +59,21 @@ var OrderSchema = new mongoose.Schema({
     comments: { type: [CommentSchema] }
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
-OrderItemsSchema.plugin(AutoIncrement.plugin, 'OrderItems');
-
-var OrderModel = DBConn.model('Order', OrderSchema);
-
 // Create post save hooks
-OrderSchema.post('save', async function (doc) {
+OrderSchema.post('save', async (doc) => {
     // Find the ordered item, find the order from CheckinCheckout and update the count
     // This is useful for checking if the guest has ordered the same item again
-    console.log('Updating orders to room');
-    const filter = { hotel_id: doc.hotel_id, room_no: doc.room_no, checkout: null };
+    // console.log('Updating orders to room.', doc);
+    let filter = { hotel_id: doc.hotel_id, room_no: doc.room_no, orders: doc._id, checkout: null };
     try {
-        await CheckinCheckoutModel.findOneAndUpdate(filter, { $push: { orders: doc } }, { upsert: true }).exec();
+        let currentOrder = await CheckinCheckoutModel.findOne(filter).exec();
+        console.log('pre save:currentOrders=', currentOrder);
+        if (_.isUndefined(currentOrder) || _.isNull(currentOrder)) {
+            // This order is not part of checkincheckout, add to the list
+            filter = { hotel_id: doc.hotel_id, room_no: doc.room_no, checkout: null };
+            let updated = await CheckinCheckoutModel.findOneAndUpdate(filter, { $push: { orders: doc } }).exec();
+            console.log('updated checkincheckout=', updated);
+        }
     } catch (error) {
         console.error('error in storing order reference to CheckinCheckout:', error);
     }
@@ -84,11 +89,18 @@ OrderSchema.post('save', async function (doc) {
     */
 });
 
-OrderSchema.pre('updateOne', { document: true, query: false }, function () {
+OrderSchema.pre('save', async () => {
+    console.log('+++statues=', this.status, this.curr_status);
+})
+
+OrderSchema.pre('updateOne', { document: true, query: false }, async function () {
     this.set({ updated_at: new Date() });
 })
 
 OrderSchema.index({ hotel_id: 1, o_id: 1 }, { unique: true });
 OrderSchema.index({ hotel_id: 1, user_id: 1 });
 
+OrderItemsSchema.plugin(AutoIncrement.plugin, 'OrderItems');
+
+var OrderModel = DBConn.model('Order', OrderSchema);
 module.exports = OrderModel;

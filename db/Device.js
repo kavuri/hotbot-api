@@ -9,8 +9,8 @@ var _ = require('lodash'),
     mongoose = require('mongoose'),
     AuditLogModel = require('./AuditLog'),
     DBConn = require('./index').DBConn,
-    HotelModel = require('../db/Hotel'),
-    RoomModel = require('../db/Room');
+    HotelModel = require('./Hotel'),
+    RoomModel = require('./Room');
 
 /**
  * Table schema

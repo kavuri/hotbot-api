@@ -39,6 +39,37 @@ router.get('/',
         }
     });
 
+/**
+ * Gets the details of a hotel
+ */
+router.get('/:_id',
+    // auth0.authenticate,
+    // auth0.authorize('read:hotel'),
+    [
+        check('_id').exists({ checkNull: true, checkFalsy: true }),
+    ],
+    async (req, res) => {
+        try {
+            validationResult(req).throw();
+        } catch (error) {
+            return res.status(422).send(error);
+        }
+
+        let _id = req.params._id;
+        try {
+            let hotel = await HotelModel
+                .findById(_id)
+                .populate('rooms')
+                .populate({ path: 'rooms', populate: { path: 'device' } })
+                .exec();
+            console.log('hotel data=', JSON.stringify(hotel));
+            res.status(200).send(hotel);
+        } catch (error) {
+            console.error('error in getting hotel data:', _id);
+            res.status(500).send(error);
+        }
+    });
+
 router.post('/:group_id',
     //auth0.authenticate,
     //auth0.authorize('create:hotel'),
@@ -93,7 +124,7 @@ router.put('/:hotel_id',
             // Find the hotel so that reference to room can be made
             let hotel = await HotelModel.findOne({ hotel_id: hotel_id }).populate('rooms').exec();
             if (_.isUndefined(hotel) || _.isNull(hotel)) {
-                return res.status(404).send({error:'hotel with id ' + hotel_id + ' not found'});
+                return res.status(404).send({ error: 'hotel with id ' + hotel_id + ' not found' });
             }
             // Check if room_no has already been added to hotel
             room.hotel_id = hotel_id;
