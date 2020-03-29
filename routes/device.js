@@ -47,6 +47,26 @@ router.get('/',
     });
 
 /**
+ * @returns all unassigned devices 
+ */
+router.get('/unassigned',
+    //auth0.authenticate,
+    //auth0.authorize('read:device'),
+    async function (req, res) {
+        console.log('get all unassigned devices.', req.query.hotel_id);
+        try {
+            let devices = await DeviceModel
+                .find({ belongs_to: null, room: null })
+                .exec();
+            // console.log(devices);
+            return res.status(200).send(devices);
+        } catch (error) {
+            console.log('error in getting all devices.', error);
+            return res.status(400).send(error);
+        }
+    });
+
+/**
  * @param hotel_id
  * @param device_id
  * @returns deactivated device object

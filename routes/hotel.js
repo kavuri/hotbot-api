@@ -42,11 +42,11 @@ router.get('/',
 /**
  * Gets the details of a hotel
  */
-router.get('/:_id',
+router.get('/:hotel_id',
     // auth0.authenticate,
     // auth0.authorize('read:hotel'),
     [
-        check('_id').exists({ checkNull: true, checkFalsy: true }),
+        check('hotel_id').exists({ checkNull: true, checkFalsy: true }),
     ],
     async (req, res) => {
         try {
@@ -55,17 +55,17 @@ router.get('/:_id',
             return res.status(422).send(error);
         }
 
-        let _id = req.params._id;
+        let hotel_id = req.params.hotel_id;
         try {
             let hotel = await HotelModel
-                .findById(_id)
+                .findOne({hotel_id:hotel_id})
                 .populate('rooms')
                 .populate({ path: 'rooms', populate: { path: 'device' } })
                 .exec();
             console.log('hotel data=', JSON.stringify(hotel));
             res.status(200).send(hotel);
         } catch (error) {
-            console.error('error in getting hotel data:', _id);
+            console.error('error in getting hotel data:', hotel_id);
             res.status(500).send(error);
         }
     });
