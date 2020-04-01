@@ -9,6 +9,7 @@ const router = express.Router();
 const auth0 = require('../lib/auth0');
 const HotelModel = require('../../src/db/Hotel'),
     RoomModel = require('../../src/db/Room'),
+    CheckinCheckout = require('../../src/db/CheckinCheckout'),
     _ = require('lodash'),
     { check, validationResult } = require('express-validator');
 
@@ -58,14 +59,15 @@ router.get('/:hotel_id',
         let hotel_id = req.params.hotel_id;
         try {
             let hotel = await HotelModel
-                .findOne({hotel_id:hotel_id})
+                .findOne({ hotel_id: hotel_id })
                 .populate('rooms')
                 .populate({ path: 'rooms', populate: { path: 'device' } })
+                .populate({ path: 'rooms', populate: { path: 'checkincheckout' } })
                 .exec();
             console.log('hotel data=', JSON.stringify(hotel));
             res.status(200).send(hotel);
         } catch (error) {
-            console.error('error in getting hotel data:', hotel_id);
+            console.error('error in getting hotel data:', hotel_id, error);
             res.status(500).send(error);
         }
     });
