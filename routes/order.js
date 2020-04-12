@@ -6,16 +6,19 @@
 'use strict';
 const express = require('express');
 const router = express.Router();
+const querystring = require('querystring');
 const OrderModel = require('../../src/db/Order');
 const { check, validationResult } = require('express-validator');
 const auth0 = require('../lib/auth0');
 const ordersListener = require('../lib/ordersListener');
 const findHotelOfUser = require('../lib/helpers').findHotelOfUser;
 const _ = require('lodash');
+const moment = require('moment');
 const CheckinCheckoutModel = require('../../src/db/CheckinCheckout');
 
 /**
  * Post an order. This method would not be used in real use
+ * //FIXME: Remove this endpoint in production
  * @param hotel_id
         user_id,
         room_no,
@@ -49,7 +52,7 @@ router.post('/',
             return res.status(500).send(error);
         }
 
-        console.log('checkincheckout=', checkincheckout);
+        // console.log('checkincheckout=', checkincheckout);
         let order = new OrderModel({
             hotel_id: req.body.hotel_id,
             user_id: req.body.user_id,
@@ -63,7 +66,7 @@ router.post('/',
         let saved_order;
         try {
             saved_order = order = await order.save();
-            console.log('order=', saved_order);
+            // console.log('order=', saved_order);
         } catch (error) {
             console.log('error while saving order:', error);
             res.status(500).send(error);
@@ -73,53 +76,8 @@ router.post('/',
     });
 
 /**
- * Gets all orders of the hotel (open ones by default)
- * @param hotel_id
- * @param room_no
- * @param status (optional. 'new' by default)
- * @returns all orders (new or done)
-router.get('/',
-    auth0.authenticate,
-    auth0.authorize('read:order'),
-    async function (req, res) {
-
-        const user_id = req.user.sub;
-
-        var err = validationResult(req);
-        if (!err.isEmpty()) {
-            console.log(err.mapped())
-            return res.status(400).json({ error: 'hotel_id required' });
-        }
-
-        let hotel_id;
-        try {
-            hotel_id = await findHotelOfUser(user_id);
-            console.log('got hotel_id=', hotel_id);
-        } catch (error) {
-            return res.status(500).json(error);
-        }
-
-        let status;
-        if (_.isUndefined(req.query.status)) status = 'new';
-        else status = req.query.status;
-
-        console.log(req.query.status, hotel_id, 'status=', status)
-
-        let orders;
-        try {
-            orders = await OrderModel.find({ hotel_id: hotel_id, "status.status": status }).exec();
-            // console.log('orders=', orders)
-        } catch (error) {
-            console.error(error);
-            res.status(500).send(error);
-        }
-
-        res.status(200).json(orders);
-    });
- */
-
-/**
- * Gets all orders of the hotel 
+ * Gets all orders of the hotel on a particular day
+ * Also fetches all open orders (status='done' or 'progress') from all previous days
  * @param hotel_id
  * @param room_no
  * @param status (optional. 'new' by default)
@@ -129,8 +87,8 @@ router.get('/',
     // auth0.authenticate,
     // auth0.authorize('read:order'),
     [
-        check('hotel_id').exists({ checkNull: true, checkFalsy: true }),
-        check('page').exists({ checkNull: true, checkFalsy: true }),
+        check('hotel_id').exists({ checkNull: true, checkFalsy: true }),    //FIXME: Remove getting hotel from user
+        check('reqDate').exists({ checkNull: true, checkFalsy: true }).custom(value => { return moment(value).isValid() }),
     ],
     async function (req, res) {
 
@@ -142,14 +100,22 @@ router.get('/',
 
         let rowsPerPage = parseInt(req.query.rowsPerPage || 10); // results per page
         rowsPerPage = rowsPerPage > 100 ? 100 : rowsPerPage; // Maximum number of return items per page
-        const page = parseInt(req.query.page || 0); // Page 
 
-        const hotel_id = req.query.hotel_id;
-        let status = req.query.status;
+        const hotel_id = req.query.hotel_id,
+            page = parseInt(req.query.page),
+            status = req.query.status,
+            reqDate = querystring.unescape(req.query.reqDate);
 
-        console.log('get all orders:hotel_id=', hotel_id, 'status=', status, ', rowsPerPage=', rowsPerPage, ',page=', page);
+        console.log('get all orders:hotel_id=', hotel_id, 'status=', status, ', rowsPerPage=', rowsPerPage, ',page=', page, ',selectedDate=', reqDate);
 
-        let query = OrderModel.find({ hotel_id: hotel_id });
+        /*
+        let query = OrderModel.find(
+            {
+                hotel_id: hotel_id,
+                created_at: { '$gte': moment(reqDate).startOf('day'), '$lte': moment(reqDate).endOf('day') }
+            }, '-priority -status -comments'); // Do not send the history fields
+
+        // Set the status filter
         if (_.isUndefined(status)) {
             // Nothing change. Do nothing
         } else if (_.isEqual(status, 'new')) {
@@ -160,16 +126,17 @@ router.get('/',
             query = query.where('curr_status.status').equals(status);
         }
 
+        // Fetch all orders in previous days that are 'done' and 'progress'
         try {
-            let total = await OrderModel
-                .countDocuments({ hotel_id: hotel_id })
-                .exec();
             let orders = await query
                 .populate('checkincheckout')
-                .skip(rowsPerPage * page)
-                .limit(rowsPerPage)
+                // .skip(rowsPerPage * page)
+                // .limit(rowsPerPage)
                 .lean()
-                .sort({ createdAt: 1 })
+                .sort({ created_at: 1 })
+                .exec();
+            let total = await query
+                .countDocuments()
                 .exec();
             console.log('orders count=', total);
             res.status(200).json({ data: orders, total: total });
@@ -177,6 +144,35 @@ router.get('/',
             console.error(error);
             res.status(500).send(error);
         }
+        */
+        let facets = {};
+        facets['allOnDate'] = [
+            { $match: { created_at: { '$gte': moment(reqDate).startOf('day').toDate(), '$lte': moment(reqDate).endOf('day').toDate() } } },
+            { $sort: { created_at: 1 } },
+            { $lookup: { from: 'checkincheckouts', localField: 'checkincheckout', foreignField: '_id', as: 'checkincheckout' } },
+            { $project: { priority: 0, status: 0, comments: 0 } },
+        ];
+        facets['allOpen'] = [
+            { $match: { 'curr_status.status': { $in: ['new', 'progress'] } } },
+            // { $match: { $and: [{ 'curr_status.status': { $in: ['new', 'progress'] } }, { created_at: { '$lt': moment(reqDate).startOf('day').toDate() } }] } },
+            { $sort: { created_at: 1 } },
+            { $project: { priority: 0, status: 0, comments: 0 } },
+            { $lookup: { from: 'checkincheckouts', localField: 'checkincheckout', foreignField: '_id', as: 'checkincheckout' } },
+        ];
+
+        try {
+            let orders = await OrderModel
+                .aggregate([{ $match: { hotel_id: hotel_id } }])
+                .facet(facets)
+                .exec();
+
+            // console.log('count=', orders[0].allOnDate);
+            return res.status(200).send(orders[0]);
+        } catch (error) {
+            console.error(error);
+            res.status(500).send(error);
+        }
+
     });
 
 router.get('/listen',
@@ -210,27 +206,33 @@ router.get('/listen',
         })
     });
 
-router.get('/testlisten', auth0.authenticate, async (req, res, next) => {
-    const headers = {
-        'Content-Type': 'text/event-stream',
-        'Connection': 'keep-alive',
-        'Cache-Control': 'no-cache'
-    };
-    res.writeHead(200, headers);
+/**
+ * This is a test listener that takes hotel_id as argument and send the results
+ */
+// FIXME: Only for testing. Remove it in production
+router.get('/testlisten',
+    // auth0.authenticate,
+    async (req, res, next) => {
+        const headers = {
+            'Content-Type': 'text/event-stream',
+            'Connection': 'keep-alive',
+            'Cache-Control': 'no-cache'
+        };
+        res.writeHead(200, headers);
 
-    res.write('\n\n');
+        res.write('\n\n');
 
-    // const clientId = req.user.sub;
-    const clientId = Date.now();
-    let hotel_id = '100';
+        const hotel_id = req.query.hotel_id;
+        console.log('__hotel_id=', hotel_id);
+        const clientId = Date.now();
 
-    ordersListener.addClient(hotel_id, clientId, res);
+        ordersListener.addClient(hotel_id, clientId, res);
 
-    req.on('close', () => {
-        console.log('closing client connection ', clientId);
-        ordersListener.removeClient(hotel_id, clientId);
+        req.on('close', () => {
+            console.log('closing client connection ', clientId);
+            ordersListener.removeClient(hotel_id, clientId);
+        });
     });
-});
 
 async function addNest(req, res, next) {
     const newNest = req.body;
@@ -240,7 +242,7 @@ async function addNest(req, res, next) {
     res.json(newNest)
 
     // Invoke iterate and send function
-    return ordersListener.sendEvent('100', newNest);
+    return ordersListener.sendEvent('1', newNest);
 }
 
 router.post('/nest', addNest);
@@ -344,54 +346,6 @@ router.patch('/:order_id/',
             return res.status(200).send(order);
         } catch (error) {
             return res.status(500).send(error);
-        }
-    });
-
-/**
- * Searches the item names
- * @param hotel_id
- * @param room_no
- * @param status (optional. 'new' by default)
- * @returns all orders (new or done)
- */
-router.get('/search',
-    // auth0.authenticate,
-    // auth0.authorize('read:order'),
-    [
-        check('hotel_id').exists({ checkNull: true, checkFalsy: true }),
-        check('text').exists({ checkNull: true, checkFalsy: true }),
-        check('page').exists({ checkNull: true, checkFalsy: true }),
-    ],
-    async function (req, res) {
-
-        try {
-            validationResult(req).throw();
-        } catch (error) {
-            return res.status(422).send(error);
-        }
-
-        let rowsPerPage = parseInt(req.query.rowsPerPage || 10); // results per page
-        rowsPerPage = rowsPerPage > 50 ? 50 : rowsPerPage; // Maximum number of return items per page
-        const page = parseInt(req.query.page || 0); // Page 
-        const text = req.query.text;
-
-        const hotel_id = req.query.hotel_id;
-
-        console.log('search orders:hotel_id=', hotel_id, ', rowsPerPage=', rowsPerPage, ',page=', page, ', text=', text);
-
-        try {
-            let orders = await OrderModel
-                .find({ hotel_id: hotel_id, $text: { $search: text } })
-                .skip(rowsPerPage * page)
-                .limit(rowsPerPage)
-                .lean()
-                .sort({ created_at: 1 })
-                .exec();
-            console.log('$$$ result orders=', orders);
-            res.status(200).json({ data: orders, total: orders.length });
-        } catch (error) {
-            console.error(error);
-            res.status(500).send(error);
         }
     });
 
